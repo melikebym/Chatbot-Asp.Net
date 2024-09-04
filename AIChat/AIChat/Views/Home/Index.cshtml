@@ -1,0 +1,335 @@
+﻿<div class="chat-container">
+    <div class="chat-content">
+        <div class="chat-message">
+            <div class="avatar">
+                <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+            </div>
+            <div class="message">
+                ElementAI tarafından sağlanan bilgiler, otomatik olarak üretilmiştir ve yalnızca genel bilgilendirme amaçlıdır.
+                Bilgilerin doğruluğu garanti edilmez; bu nedenle, herhangi bir karar almadan önce ek doğrulama yapmanız önerilir.
+                ElementAI, sunulan bilgilerin doğruluğu veya kullanımından doğabilecek sonuçlar konusunda sorumluluk kabul etmez.
+            </div>
+        </div>
+        <div class="chat-message">
+            <div class="avatar">
+                <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+            </div>
+            <div class="message">
+                Güvenliğiniz bizim için önemlidir!
+                ElementAI üzerindeki tüm işlemler, yalnızca kendi sunucularımızda korunmakta ve bilgileriniz asla üçüncü taraflarla paylaşılmamaktadır!
+            </div>
+        </div>
+        <div class="chat-message">
+            <div class="avatar">
+                <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+            </div>
+            <div class="message">
+                Selam, size nasıl yardımcı olabilirim?
+            </div>
+        </div>
+    </div>
+    <div class="chat-footer">
+        <div class="avatar">
+            <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+        </div>
+        <input type="text" placeholder="Mesaj gönder" class="message-input">
+        <button class="send-btn">Gönder</button>
+        <button class="stop-btn" style="display:none;">
+            <img src="https://cdn-icons-png.flaticon.com/512/4029/4029077.png "
+                 style="width:15px; height:15px; margin-bottom:3px; margin-right:3px; filter: invert(1);" alt="" title="" class="img-small">Durdur
+        </button>
+    </div>
+</div>
+<div class="bubble">
+    <div id="small-bubble" class="small-bubble" style=" margin-right:35px; margin-bottom:15px;">
+        <img src="~/image/sss.png" alt="SSS" style="width:55px; height:50px;margin-bottom: -20px;">
+    </div>
+</div>
+
+<div class="assistance-chat" id="assistance-chat" style="display:none;">
+    <div class="chat-content">
+        <div class="chat-message">
+            <div class="avatar">
+                <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+            </div>
+            <div class="message">
+                Merhaba, size hangi konuda yardımcı olmamı istiyorsunuz?
+            </div>
+        </div>
+        <div class="button-container" id="button-container">
+
+        </div>
+    </div>
+    <div class="chat-footer">
+        <div class="avatar">
+            <img src="~/image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+        </div>
+        <input type="text" placeholder="Mesaj gönder" class="message-input">
+        <button class="send-btn">Gönder</button>
+    </div>
+</div>
+
+<script>
+    document.querySelector('.send-btn').addEventListener('click', async function () {
+        let messageInput = document.querySelector('.message-input');
+        let message = messageInput.value;
+        let sendBtn = document.querySelector('.send-btn');
+        let stopBtn = document.querySelector('.stop-btn');
+
+        if (message.trim() !== "") {
+            let chatContent = document.querySelector('.chat-content');
+            let userMessage = `
+                            <div class="chat-message user-message">
+                                <div class="message">${message}</div>
+                            </div>`;
+            chatContent.innerHTML += userMessage;
+            messageInput.value = '';
+            chatContent.scrollTop = chatContent.scrollHeight;
+
+            sendBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+
+            let loadingMessage = document.createElement('div');
+            loadingMessage.classList.add('chat-message', 'loading-message');
+            loadingMessage.innerHTML = `
+                                <div class="avatar">
+                                    <img src="../image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+                                </div>
+                                <div class="message">
+                                    <div class="loading-dots">
+                                        <span>.</span><span>.</span><span>.</span>
+                                    </div>
+                                </div>`;
+            chatContent.appendChild(loadingMessage);
+            chatContent.scrollTop = chatContent.scrollHeight;
+
+            let response = await fetch('http://localhost:11434/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'chatbot',
+                    messages: [{ role: 'user', content: message }],
+                    stream: true
+                })
+            });
+
+            if (response.ok) {
+                let reader = response.body.getReader();
+                let decoder = new TextDecoder('utf-8');
+                let botMessage = document.createElement('div');
+                botMessage.classList.add('chat-message');
+                botMessage.innerHTML = `
+                                <div class="avatar">
+                                    <img src="../image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+                                </div>
+                                <div class="message"></div>`;
+                chatContent.replaceChild(botMessage, loadingMessage);
+
+                let messageElement = botMessage.querySelector('.message');
+                let buffer = '';
+                let stopStream = false;
+
+                // Durdur butonuna tıklama olayını tanımla
+                stopBtn.addEventListener('click', function () {
+                    stopStream = true; // Yanıtı durdur
+                    stopBtn.style.display = 'none'; // Durdur butonunu gizle
+                    sendBtn.style.display = 'inline-block'; // Gönder butonunu göster
+                });
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done || stopStream) break; // Yanıt tamamlandıysa veya durdurma talep edildiyse döngüyü kır
+                    let chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+
+                    // JSON nesnelerini ayır
+                    let jsonChunks = buffer.split('\n');
+
+                    // Son parçayı buffer'a geri ekle
+                    buffer = jsonChunks.pop();
+
+                    for (let jsonChunk of jsonChunks) {
+                        if (jsonChunk.trim() === '') continue; // Boş satırları atla
+
+                        try {
+                            let parsedChunk = JSON.parse(jsonChunk);
+                            if (parsedChunk.message && parsedChunk.message.content) {
+                                messageElement.innerHTML += parsedChunk.message.content;
+                                chatContent.scrollTop = chatContent.scrollHeight;
+                            }
+                        } catch (e) {
+                        }
+                    }
+                }
+
+            } else {
+                loadingMessage.innerHTML = `
+                                <div class="message">Bir hata oluştu. Lütfen tekrar deneyin.</div>`;
+            }
+
+            stopBtn.style.display = 'none'; // Durdur butonunu gizle
+            sendBtn.style.display = 'inline-block'; // Gönder butonunu göster
+            chatContent.scrollTop = chatContent.scrollHeight;
+        }
+    });
+
+    document.querySelector('.message-input').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            document.querySelector('.send-btn').click();
+        }
+    });
+
+
+    let clickCount = 0;
+    document.getElementById('small-bubble').addEventListener('click', function () {
+        let chatContainer = document.querySelector('.chat-container');
+        let assistanceChat = document.querySelector('.assistance-chat');
+        let smallBubbleImg = document.querySelector('#small-bubble img');
+        let messageInput = document.querySelector('.message-input');
+
+
+        if (chatContainer.style.display === 'flex') {
+            chatContainer.style.display = 'none';
+            assistanceChat.style.display = 'flex';
+            smallBubbleImg.src = "../image/typing.png"; // cross.png'ye değiştir
+            smallBubbleImg.style.height = "50px";
+            smallBubbleImg.style.width = "50px";
+
+        } else {
+            chatContainer.style.display = 'flex';
+            assistanceChat.style.display = 'none';
+            smallBubbleImg.src = "../image/sss.png"; // eski haline dön
+            smallBubbleImg.style.height = "50px";
+            smallBubbleImg.style.width = "55px";
+
+        }
+        clickCount++; // Her tıklamada sayaç artırılır
+        if (clickCount === 3) {
+            location.reload(); // Eğer tıklama sayısı 2'ye ulaşırsa sayfa yenilenir
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const buttonContainer = document.getElementById('button-container');
+        const assistanceChat = document.getElementById('assistance-chat');
+
+        function loadOptions() {
+
+
+            $.ajax({
+                type: "GET",
+                async: false,
+                url: '@Url.Action("GetHierarchy", "Options")',
+                success: function (result) {
+                     if (result) {
+                        populateButtons(result);
+                    } else {
+                        console.error('Failed to load options');
+                    }
+                }
+            });
+
+        }
+
+        function populateButtons(options) {
+            buttonContainer.innerHTML = ''; // Clear existing buttons
+
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.className = 'action-button';
+                button.textContent = option.optionName;
+                buttonContainer.appendChild(button);
+
+                button.addEventListener('click', function () {
+                    handleButtonClick(option);
+                });
+            });
+        }
+
+        function handleButtonClick(option) {
+            const message = option.optionName;
+            const chatContent = assistanceChat.querySelector('.chat-content');
+
+            buttonContainer.classList.add('hidden');
+
+            const userMessage = document.createElement('div');
+            userMessage.className = 'chat-message user-message';
+            userMessage.innerHTML = `
+                            <div class="message">${message}</div>`;
+            chatContent.appendChild(userMessage);
+            
+            $.ajax({
+                type: "GET",
+                url: '/Options/GetChildren', // Doğru URL'yi kontrol edin
+                data: { id: option.optionID },
+                success: function (result) {
+                    if (result && result.length > 0) {
+                        // Create and add the response message
+                        const responseMessage = document.createElement('div');
+                        responseMessage.className = 'chat-message';
+                        responseMessage.innerHTML = `
+                                <div class="avatar">
+                                    <img src="../image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+                                </div>
+                                <div class="message">İşte size yardımcı olabileceğim "${message}" içerikleri...</div>`;
+                        chatContent.appendChild(responseMessage);
+
+                        const newButtonContainer = document.createElement('div');
+                        newButtonContainer.className = 'button-container';
+
+                        // Döngü ile yeni düğmeleri ekle
+                        result.forEach(childOption => {
+                            const childButton = document.createElement('button');
+                            childButton.className = 'action-button';
+                            childButton.textContent = childOption.optionName;
+                            newButtonContainer.appendChild(childButton);
+
+                            // Yeni düğmelere tıklama olayını dinleme
+                            childButton.addEventListener('click', function () {
+                                handleButtonClick(childOption);
+                            });
+                        });
+
+                        chatContent.appendChild(newButtonContainer);
+                    } else {
+                        const noChildResponseMessage = document.createElement('div');
+                        noChildResponseMessage.className = 'chat-message';
+
+                        if (typeof option.optionContent === 'object') {
+                            noChildResponseMessage.innerHTML = `
+                                <div class="avatar">
+                                    <img src="../image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+                                </div>
+                                <div class="message">Yakında güncellenecek...</div>`;
+                        } else {
+                            let content = option.optionContent;
+                            if (typeof option.optionLink === 'string' && option.optionLink.trim() !== '') {
+                                // Eğer optionLink bir URL ise, içerikte link olarak ekleyin
+                                content += ` <a href="${option.optionLink}" target="_blank">Daha fazla bilgi için tıklayınız.</a>`;
+                            }
+
+                            noChildResponseMessage.innerHTML = `
+                                <div class="avatar">
+                                    <img src="../image/icon.png" alt="Avatar" style="height:35px;width:35px;">
+                                </div>
+                                <div class="message">${content}</div>`;
+
+                        }
+
+                        chatContent.appendChild(noChildResponseMessage);
+
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error fetching child options:', error);
+                }
+            });
+        }
+        loadOptions();
+    });
+
+
+
+</script>

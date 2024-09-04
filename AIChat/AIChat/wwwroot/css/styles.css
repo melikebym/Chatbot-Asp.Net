@@ -1,0 +1,10 @@
+.login-container {
+    width: 100%;
+    max-width: 3400px !important;
+    height: 100vh;
+    max-height: 640px;
+    display: flex;
+    flex-direction: column;
+    background-color: #e8e8e8;
+    margin: 0 auto;
+}
